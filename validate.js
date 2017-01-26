@@ -1,5 +1,5 @@
 /*!
- * validate.js 0.10.0
+ * validate.js 0.11.1
  *
  * (c) 2013-2016 Nicklas Ansman, 2013 Wrapp
  * Validate.js may be freely distributed under the MIT license.
@@ -56,9 +56,9 @@
     // The toString function will allow it to be coerced into a string
     version: {
       major: 0,
-      minor: 10,
-      patch: 0,
-      metadata: null,
+      minor: 11,
+      patch: 1,
+      metadata: "development",
       toString: function() {
         var version = v.format("%{major}.%{minor}.%{patch}", v.version);
         if (!v.isEmpty(v.version.metadata)) {
@@ -146,30 +146,16 @@
     // Takes the output from runValidations and converts it to the correct
     // output format.
     processValidationResults: function(errors, options) {
-      var attr;
-
       errors = v.pruneEmptyErrors(errors, options);
       errors = v.expandMultipleErrors(errors, options);
       errors = v.convertErrorMessages(errors, options);
 
-      switch (options.format || "grouped") {
-        case "detailed":
-          // Do nothing more to the errors
-          break;
+      var format = options.format || "grouped";
 
-        case "flat":
-          errors = v.flattenErrorsToArray(errors);
-          break;
-
-        case "grouped":
-          errors = v.groupErrorsByAttribute(errors);
-          for (attr in errors) {
-            errors[attr] = v.flattenErrorsToArray(errors[attr]);
-          }
-          break;
-
-        default:
-          throw new Error(v.format("Unknown format %{format}", options));
+      if (typeof v.formatters[format] === 'function') {
+        errors = v.formatters[format](errors);
+      } else {
+        throw new Error(v.format("Unknown format %{format}", options));
       }
 
       return v.isEmpty(errors) ? undefined : errors;
@@ -229,18 +215,9 @@
         }
 
         return memo.then(function() {
-          return result.error.then(
-            function(error) {
-              result.error = error || null;
-            },
-            function(error) {
-              if (error instanceof Error) {
-                throw error;
-              }
-              v.error("Rejecting promises with the result is deprecated. Please use the resolve callback instead.");
-              result.error = error;
-            }
-          );
+          return result.error.then(function(error) {
+            result.error = error || null;
+          });
         });
       }, new v.Promise(function(r) { r(); })); // A resolved promise
     },
@@ -540,8 +517,10 @@
     collectFormValues: function(form, options) {
       var values = {}
         , i
+        , j
         , input
         , inputs
+        , option
         , value;
 
       if (v.isJqueryElement(form)) {
@@ -584,7 +563,21 @@
       inputs = form.querySelectorAll("select[name]");
       for (i = 0; i < inputs.length; ++i) {
         input = inputs.item(i);
-        value = v.sanitizeFormValue(input.options[input.selectedIndex].value, options);
+        if (v.isDefined(input.getAttribute("data-ignored"))) {
+          continue;
+        }
+
+        if (input.multiple) {
+          value = [];
+          for (j in input.options) {
+            option = input.options[j];
+            if (option.selected) {
+              value.push(v.sanitizeFormValue(option.value, options));
+            }
+          }
+        } else {
+          value = v.sanitizeFormValue(input.options[input.selectedIndex].value, options);
+        }
         values[input.name] = value;
       }
 
@@ -692,7 +685,11 @@
     // Out:
     // ["<message 1>", "<message 2>"]
     flattenErrorsToArray: function(errors) {
-      return errors.map(function(error) { return error.error; });
+      return errors
+        .map(function(error) { return error.error; })
+        .filter(function(value, index, self) {
+          return self.indexOf(value) === index;
+        });
     },
 
     cleanAttributes: function(attributes, whitelist) {
@@ -776,13 +773,13 @@
     // Presence validates that the value isn't empty
     presence: function(value, options) {
       options = v.extend({}, this.options, options);
-      if (v.isEmpty(value)) {
+      if (options.allowEmpty ? !v.isDefined(value) : v.isEmpty(value)) {
         return options.message || this.message || "can't be blank";
       }
     },
     length: function(value, options, attribute) {
       // Empty values are allowed
-      if (v.isEmpty(value)) {
+      if (!v.isDefined(value)) {
         return;
       }
 
@@ -830,7 +827,7 @@
     },
     numericality: function(value, options) {
       // Empty values are fine
-      if (v.isEmpty(value)) {
+      if (!v.isDefined(value)) {
         return;
       }
 
@@ -857,24 +854,36 @@
         pattern += "$";
 
         if (!(new RegExp(pattern).test(value))) {
-          return options.message || options.notValid || this.notValid || "must be a valid number";
+          return options.message ||
+            options.notValid ||
+            this.notValid ||
+            this.message ||
+            "must be a valid number";
         }
       }
 
       // Coerce the value to a number unless we're being strict.
-      if (options.noStrings !== true && v.isString(value)) {
+      if (options.noStrings !== true && v.isString(value) && !v.isEmpty(value)) {
         value = +value;
       }
 
       // If it's not a number we shouldn't continue since it will compare it.
       if (!v.isNumber(value)) {
-        return options.message || options.notValid || this.notValid || "is not a number";
+        return options.message ||
+          options.notValid ||
+          this.notValid ||
+          this.message ||
+          "is not a number";
       }
 
       // Same logic as above, sort of. Don't bother with comparisons if this
       // doesn't pass.
       if (options.onlyInteger && !v.isInteger(value)) {
-        return options.message || options.notInteger || this.notInteger  || "must be an integer";
+        return options.message ||
+          options.notInteger ||
+          this.notInteger ||
+          this.message ||
+          "must be an integer";
       }
 
       for (name in checks) {
@@ -884,7 +893,10 @@
           // For example the greaterThan check uses the message from
           // this.notGreaterThan so we capitalize the name and prepend "not"
           var key = "not" + v.capitalize(name);
-          var msg = options[key] || this[key] || "must be %{type} %{count}";
+          var msg = options[key] ||
+            this[key] ||
+            this.message ||
+            "must be %{type} %{count}";
 
           errors.push(v.format(msg, {
             count: count,
@@ -894,10 +906,16 @@
       }
 
       if (options.odd && value % 2 !== 1) {
-        errors.push(options.notOdd || this.notOdd || "must be odd");
+        errors.push(options.notOdd ||
+            this.notOdd ||
+            this.message ||
+            "must be odd");
       }
       if (options.even && value % 2 !== 0) {
-        errors.push(options.notEven || this.notEven || "must be even");
+        errors.push(options.notEven ||
+            this.notEven ||
+            this.message ||
+            "must be even");
       }
 
       if (errors.length) {
@@ -910,7 +928,7 @@
       }
 
       // Empty values are fine
-      if (v.isEmpty(value)) {
+      if (!v.isDefined(value)) {
         return;
       }
 
@@ -980,7 +998,7 @@
         , match;
 
       // Empty values are allowed
-      if (v.isEmpty(value)) {
+      if (!v.isDefined(value)) {
         return;
       }
       if (!v.isString(value)) {
@@ -997,7 +1015,7 @@
     },
     inclusion: function(value, options) {
       // Empty values are fine
-      if (v.isEmpty(value)) {
+      if (!v.isDefined(value)) {
         return;
       }
       if (v.isArray(options)) {
@@ -1014,7 +1032,7 @@
     },
     exclusion: function(value, options) {
       // Empty values are fine
-      if (v.isEmpty(value)) {
+      if (!v.isDefined(value)) {
         return;
       }
       if (v.isArray(options)) {
@@ -1031,7 +1049,7 @@
       options = v.extend({}, this.options, options);
       var message = options.message || this.message || "is not a valid email";
       // Empty values are fine
-      if (v.isEmpty(value)) {
+      if (!v.isDefined(value)) {
         return;
       }
       if (!v.isString(value)) {
@@ -1043,8 +1061,8 @@
     }, {
       PATTERN: /^[a-z0-9\u007F-\uffff!#$%&'*+\/=?^_`{|}~-]+(?:\.[a-z0-9\u007F-\uffff!#$%&'*+\/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i
     }),
-    equality: function(value, options, attribute, attributes, globalOptions) {
-      if (v.isEmpty(value)) {
+    equality: function(value, options, attribute, attributes) {
+      if (!v.isDefined(value)) {
         return;
       }
 
@@ -1073,7 +1091,7 @@
     // A URL validator that is used to validate URLs with the ability to
     // restrict schemes and some domains.
     url: function(value, options) {
-      if (v.isEmpty(value)) {
+      if (!v.isDefined(value)) {
         return;
       }
 
@@ -1090,53 +1108,75 @@
       // https://gist.github.com/dperini/729294
       var regex =
         "^" +
-          // schemes
-          "(?:(?:" + schemes.join("|") + "):\\/\\/)" +
-          // credentials
-          "(?:\\S+(?::\\S*)?@)?";
-
-      regex += "(?:";
+        // protocol identifier
+        "(?:(?:" + schemes.join("|") + ")://)" +
+        // user:pass authentication
+        "(?:\\S+(?::\\S*)?@)?" +
+        "(?:";
 
       var tld = "(?:\\.(?:[a-z\\u00a1-\\uffff]{2,}))";
 
-      // This ia a special case for the localhost hostname
       if (allowLocal) {
         tld += "?";
       } else {
-        // private & local addresses
         regex +=
-          "(?!10(?:\\.\\d{1,3}){3})" +
-          "(?!127(?:\\.\\d{1,3}){3})" +
-          "(?!169\\.254(?:\\.\\d{1,3}){2})" +
-          "(?!192\\.168(?:\\.\\d{1,3}){2})" +
-          "(?!172" +
-          "\\.(?:1[6-9]|2\\d|3[0-1])" +
-          "(?:\\.\\d{1,3})" +
-          "{2})";
+          // IP address exclusion
+          // private & local networks
+          "(?!(?:10|127)(?:\\.\\d{1,3}){3})" +
+          "(?!(?:169\\.254|192\\.168)(?:\\.\\d{1,3}){2})" +
+          "(?!172\\.(?:1[6-9]|2\\d|3[0-1])(?:\\.\\d{1,3}){2})";
       }
 
-      var hostname =
-          "(?:(?:[a-z\\u00a1-\\uffff0-9]+-?)*[a-z\\u00a1-\\uffff0-9]+)" +
-          "(?:\\.(?:[a-z\\u00a1-\\uffff0-9]+-?)*[a-z\\u00a1-\\uffff0-9]+)*" +
-          tld + ")";
-
-      // reserved addresses
       regex +=
+          // IP address dotted notation octets
+          // excludes loopback network 0.0.0.0
+          // excludes reserved space >= 224.0.0.0
+          // excludes network & broacast addresses
+          // (first & last IP address of each class)
           "(?:[1-9]\\d?|1\\d\\d|2[01]\\d|22[0-3])" +
           "(?:\\.(?:1?\\d{1,2}|2[0-4]\\d|25[0-5])){2}" +
           "(?:\\.(?:[1-9]\\d?|1\\d\\d|2[0-4]\\d|25[0-4]))" +
         "|" +
-          hostname +
-          // port number
-          "(?::\\d{2,5})?" +
-          // path
-          "(?:\\/[^\\s]*)?" +
-        "$";
+          // host name
+          "(?:(?:[a-z\\u00a1-\\uffff0-9]-*)*[a-z\\u00a1-\\uffff0-9]+)" +
+          // domain name
+          "(?:\\.(?:[a-z\\u00a1-\\uffff0-9]-*)*[a-z\\u00a1-\\uffff0-9]+)*" +
+          tld +
+        ")" +
+        // port number
+        "(?::\\d{2,5})?" +
+        // resource path
+        "(?:[/?#]\\S*)?" +
+      "$";
 
       var PATTERN = new RegExp(regex, 'i');
       if (!PATTERN.exec(value)) {
         return message;
       }
+    }
+  };
+
+  validate.formatters = {
+    detailed: function(errors) {return errors;},
+    flat: v.flattenErrorsToArray,
+    grouped: function(errors) {
+      var attr;
+
+      errors = v.groupErrorsByAttribute(errors);
+      for (attr in errors) {
+        errors[attr] = v.flattenErrorsToArray(errors[attr]);
+      }
+      return errors;
+    },
+    constraint: function(errors) {
+      var attr;
+      errors = v.groupErrorsByAttribute(errors);
+      for (attr in errors) {
+        errors[attr] = errors[attr].map(function(result) {
+          return result.validator;
+        }).sort();
+      }
+      return errors;
     }
   };
 

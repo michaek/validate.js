@@ -140,7 +140,7 @@
     }
 
     #scroll-content {
-      max-width: 800px;
+      max-width: 820px;
       min-width: 640px;
       padding: 0 30px 30px;
     }
@@ -311,7 +311,6 @@
     (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
     m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
     })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
-sFunc
     ga('create', 'UA-45797376-1', 'validatejs.org');
     ga('require', 'displayfeatures');
     ga('send', 'pageview');
@@ -350,6 +349,7 @@ sFunc
           <li><a href="#validate-single">Single value validation</a></li>
           <li><a href="#validate-nested">Nested validation</a></li>
           <li><a href="#validate-default-options">Default options</a></li>
+          <li><a href="#validate-error-formatting">Error formatting</a></li>
         </ul>
       </li>
       <li>
@@ -404,6 +404,8 @@ sFunc
       <li>
         <a href="#changelog">Changelog</a>
         <ul>
+          <li><a href="#changelog-0-11-1">0.11.1</a></li>
+          <li><a href="#changelog-0-11-0">0.11.0</a></li>
           <li><a href="#changelog-0-10-0">0.10.0</a></li>
           <li><a href="#changelog-0-9-0">0.9.0</a></li>
           <li><a href="#changelog-0-8-0">0.8.0</a></li>
@@ -461,15 +463,15 @@ sFunc
           </p>
           <h2 id="downloads">Downloads</h2>
           <div class="download">
-            <a class="btn btn-default" download href="validate.js">Development version (0.10.0)</a>
+            <a class="btn btn-default" download href="validate.js">Development version (0.11.1)</a>
             <div class="info">
               <span class="details">33KB, uncompressed and plenty of comments</span>
             </div>
           </div>
           <div class="download">
-            <a class="btn btn-primary" download href="validate.min.js">Production version (0.10.0)</a>
+            <a class="btn btn-primary" download href="validate.min.js">Production version (0.11.1)</a>
             <div class="info">
-              <span class="details">4.6KB, minified and gzipped</span><br>
+              <span class="details">4.56KB, minified and gzipped</span><br>
               <a download href="validate.min.map">(Source map)</a>
             </div>
           </div>
@@ -488,7 +490,7 @@ sFunc
           <div id="installing">
             <h2>Installing</h2>
             <b>Browser/CDN</b>
-            <pre><code class="html">&lt;script src="//cdnjs.cloudflare.com/ajax/libs/validate.js/0.10.0/validate.min.js"&gt;&lt;/script&gt;</code></pre>
+            <pre><code class="html">&lt;script src="//cdnjs.cloudflare.com/ajax/libs/validate.js/0.11.1/validate.min.js"&gt;&lt;/script&gt;</code></pre>
             <b>Require.js/AMD</b>
             <pre><code class="javascript">require(["validate.js"], function(validate) {
   // ...
@@ -705,14 +707,10 @@ validate({creditCardNumber: "340000000000000"}, constraints);
             can just override the <code>validate.prettify</code> to your liking.
           </p>
           <p class="description">
-            There is also a <b>format</b> option which accepts the following
-            values:
+            There is also a <b>format</b> option. To see more details about this
+            option see
+            <a href="#validate-error-formatting">the section about it</a>.
           </p>
-          <ul>
-            <li><code>"grouped"</code> (default) - Returns error messages grouped by attribute.</li>
-            <li><code>"flat"</code> - Returns a flat list of error messages.</li>
-            <li><code>"detailed"</code> - Returns a list of error objects containing more info on the error (see example). Each object will only contain a single message.</li>
-          </ul>
           <pre><code class="javascript">var constraints = {
   username: {
     presence: true,
@@ -729,6 +727,7 @@ validate({creditCardNumber: "340000000000000"}, constraints);
     }
   }
 };
+
 validate({password: "bad"}, constraints);
 // =&gt; {
 //   "username": ["Username can't be blank"],
@@ -1002,6 +1001,92 @@ validate({}, constraints);
 // The default options are not used if the constraints options are falsy
 validate({format: "grouped"}, {});
 // =&gt; undefined</code></pre>
+          </div>
+          <div id="validate-error-formatting">
+            <h3>Error formatting</h3>
+            <p class="description">
+              validate.js allows the result from the validate function to be
+              formatted in different ways.
+            </p>
+            <ul>
+              <li><code>"grouped"</code> (default) - Returns error messages grouped by attribute.</li>
+              <li><code>"flat"</code> - Returns a flat list of error messages.</li>
+              <li><code>"detailed"</code> - Returns a list of error objects containing more info on the error (see example). Each object will only contain a single message.</li>
+            </ul>
+            <p class="description">
+              You can also create custom formatters by adding them to the
+              <code>validate.formatters</code> object. The formatter should be
+              a function that accepts a list of errors that have the same format
+              as the detailed format.
+            </p>
+            <pre><code class="javascript">var constraints = {
+  username: {
+    presence: true,
+    exclusion: {
+      within: ["nicklas"],
+      message: "'%{value}' is not allowed"
+    }
+  },
+  password: {
+    presence: true,
+    length: {
+      minimum: 6,
+      message: "must be at least 6 characters"
+    }
+  }
+};
+
+validate({}, constraints, {format: "flat"});
+// =&gt; ["Username can't be blank", "Password can't be blank"]
+
+validate({username: "nicklas", password: "bad"}, constraints, {format: "detailed"});
+// =&gt; [
+//   {
+//     "attribute": "username",
+//     "value": "nicklas",
+//     "validator": "exclusion",
+//     "globalOptions": {
+//       "format": "detailed"
+//     },
+//     "attributes": {
+//       "username": "nicklas",
+//       "password": "bad"
+//     },
+//     "options": {
+//       "within": [
+//         "nicklas"
+//       ],
+//       "message": "'%{value}' is not allowed"
+//     },
+//     "error": "Username 'nicklas' is not allowed"
+//   },
+//   {
+//     "attribute": "password",
+//     "value": "bad",
+//     "validator": "length",
+//     "globalOptions": {
+//       "format": "detailed"
+//     },
+//     "attributes": {
+//       "username": "nicklas",
+//       "password": "bad"
+//     },
+//     "options": {
+//       "minimum": 6,
+//       "message": "must be at least 6 characters"
+//     },
+//     "error": "Password must be at least 6 characters"
+//   }
+// ]
+
+validate.formatters.custom = function(errors) {
+  return errors.map(function(error) {
+    return error.validator;
+  });
+};
+
+validate({username: "nicklas", password: "bad"}, constraints, {format: "custom"});
+// =&gt; ["exclusion", "length"];</code></pre>
           </div>
         </div>
         <div id="custom-validator">
@@ -1644,7 +1729,7 @@ validate({duration: 4711}, constraints);
           <div id="validators-presence">
             <div class="signature"><b>presence</b></div>
             <p class="description">
-              The presence validator validates that the value isn't empty.
+              The presence validator validates that the value isn't defined.
               This validator will probably the most used one, it corresponds to
               HTML5's required attribute.<br>
               You can use the <b>message</b> option to customize the message. The
@@ -1660,8 +1745,13 @@ validate({duration: 4711}, constraints);
               <li><code>{}</code> (empty objects)</li>
               <li><code>[]</code> (empty arrays)</li>
               <li><code>""</code> (empty string)</li>
-              <li><code>" "</code> (whitespace only string)</li>
+              <li><code>"  "</code> (whitespace only string)</li>
             </ul>
+            <p class="description">
+              If you don't want to reject empty objects, arrays or strings
+              you can set the <code>allowEmpty</code> option to
+              <code>true</code>.
+            </p>
             <p class="notes">
               <b>Important!</b> All other values are considered valid (including functions)!
             </p>
@@ -1670,6 +1760,12 @@ validate({duration: 4711}, constraints);
 // =&gt; {"username": ["Username can't be blank"]}
 
 validate({username: "ansman"}, {username: {presence: true}});
+// =&gt; undefined
+
+validate({input: ""}, {input: {presence: true}});
+// =&gt; {"input:" ["Input can't be blank"]}
+
+validate({input: ""}, {input: {presence: {allowEmpty: true}}});
 // =&gt; undefined
 
 validate({}, {username: {presence: {message: "is required"}}});
@@ -2260,7 +2356,90 @@ validate.result("foo".toUpperCase);
         </div>
         <div id="changelog">
           <h2>Changelog</h2>
-          <div id="changelog-0.10.0">
+          <div id="changelog-wip">
+            <h3>
+              <b class="version">WIP</b>
+            </h3>
+            <ul>
+              <li>
+                Fixed a bug that caused the <code>data-ignored</code> attribute
+                to have no effect for select tags.
+                Thanks <a href="https://github.com/ansman/validate.js/issues/171" target="_blank">Jonathan Lister</a>
+                for reporting this.
+              </li>
+            </ul>
+          </div>
+          <div id="changelog-0-11-1">
+            <h3>
+              <b class="version">0.11.1</b>
+              -
+              <span class="date">Nov 6, 2016</span>
+              -
+              <a href="http://htmlpreview.github.com/?https://raw.github.com/ansman/validate.js/0.11.1/index.html">Docs</a>
+              -
+              <a href="https://github.com/ansman/validate.js/compare/0.11.0...0.11.1">Diff</a>
+            </h3>
+            <ul>
+              <li>
+                Fix an error with the typscript bindings.
+                Thank <a href="https://github.com/ansman/validate.js/issues/168" target="_blank">Jeff Barnes</a> for reporting and fixing this.
+              </li>
+            </ul>
+          </div>
+          <div id="changelog-0-11-0">
+            <h3>
+              <b class="version">0.11.0</b>
+              -
+              <span class="date">Nov 5, 2016</span>
+              -
+              <a href="http://htmlpreview.github.com/?https://raw.github.com/ansman/validate.js/0.11.0/index.html">Docs</a>
+              -
+              <a href="https://github.com/ansman/validate.js/compare/0.10.0...0.11.0">Diff</a>
+            </h3>
+            <ul>
+              <li>
+                <b>Breaking:</b> The ability to reject async validations with
+                a result is not removed.
+              </li>
+              <li>
+                Custom error formatters can now be created. See
+                <a href="#validate-error-formatting">here</a> for more info.
+                Thanks <a href="https://github.com/ansman/validate.js/pull/138" target="_blank">Freak in a Box</a>
+                for suggesting an implementing this.
+              </li>
+              <li>
+                <code>collectFormValues</code> now supports <code>&lt;select&gt;</code>
+                tags with the <code>multiple</code> attribute. Thanks
+                <a href="https://github.com/ansman/validate.js/issues/142" target="_blank">Oleg Sverdlov</a>
+                for reporting this issue.
+              </li>
+              <li>
+                Typescript bindings have now been added. Thanks
+                <a href="https://github.com/ansman/validate.js/pull/140" target="_blank">Rob Eisenberg</a> for fixing this.
+              </li>
+              <li>
+                Allow setting a default message on the numericality validator
+                by setting <code>validate.validators.numericality.message</code>.
+                Thanks <a href="https://github.com/ansman/validate.js/pull/145" target="_blank">Nicolas Brassard</a> for suggesting this.
+              </li>
+              <li>
+                Errors are now deduplicated when using the flat or grouped format.
+              </li>
+              <li>
+                Fixed an issue where some URLs would be detected as invalid when
+                they weren't. Thanks <a href="https://github.com/ansman/validate.js/issues/153" target="_blank">huan086</a>
+                for reporting this.
+              </li>
+              <li>
+                <b>Breaking:</b> The <code>presence</code> validator no longer
+                allows empty and whitespace only strings per default. This
+                behaviour can be modified by using the
+                <code>allowEmpty</code> option.
+                Thanks <a href="https://github.com/ansman/validate.js/issues/99" target="_blank">mondwan</a> for reporting this.
+              </li>
+            </ul>
+          </div>
+          <div id="changelog-0-10-0">
             <h3>
               <b class="version">0.10.0</b>
               -
